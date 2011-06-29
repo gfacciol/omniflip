@@ -9,7 +9,8 @@ class Frame(wx.Frame):
         wx.Frame.__init__(self, parent, id, title=title, size=MAIN_WINDOW_DEFAULT_SIZE, style=style)
         self.Center() # open in the centre of the screen
         self.panel = wx.Panel(self)
-        self.panel.SetBackgroundColour('White') # make the background of the window white
+        self.panel.SetBackgroundColour('White') # make the background
+                                                # of the window white
 
 class App(wx.App):
     
