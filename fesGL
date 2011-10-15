@@ -1,7 +1,7 @@
 
 EXRINC="-I/usr/local/include/OpenEXR/"
 EXRLIB="-L/usr/local/lib/ -lIex -lHalf -lIlmImf"
-c99 -DNDEBUG -DI_CAN_HAS_LIBEXR -O3 -c libiio/iio.c ${EXRINC} -o libiio/iio.o
+c99 -W 64 -DNDEBUG -DI_CAN_HAS_LIBEXR -O3 -c libiio/iio.c ${EXRINC} -o libiio/iio.o
 g++ -DI_CAN_HAS_LIBEXR -c -Wall -Ilibiio ${EXRINC} libiio/read_exr_float.cpp  -o libiio/read_exr_float.o
 
 

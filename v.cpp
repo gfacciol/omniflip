@@ -33,6 +33,7 @@ void printhelp() {
    printf(" scroll wheel: move boundary of the range\n");
    printf(" click       : inspect pixel values\n");
    printf(" c : reset contrast range\n");
+   printf(" C : set/unset automatic contrast\n");
    printf(" l : log of the range\n");
    printf(" s : save snapshot000.png\n");
    printf(" m : select the minimum of the range to move\n");
@@ -124,6 +125,7 @@ int main(int argc,char **argv) {
    int num_files=argc-1;
    int fileidx=0;
    char *filename, *altfilename=NULL;
+   int AUTOMATIC_CONTRAST=0;
 
    int wheel=0;
    int my=-1;
@@ -250,6 +252,17 @@ int main(int argc,char **argv) {
                render_image(imageU,vmin,vmax,DISPimage);
                DISPimage.display(main_disp);
                break;
+            case 'C':
+               AUTOMATIC_CONTRAST=(AUTOMATIC_CONTRAST+1)%2;
+               if(AUTOMATIC_CONTRAST) {
+                  image_range(imageU,vmin,vmax);
+                  render_image(imageU,vmin,vmax,DISPimage);
+                  DISPimage.display(main_disp);
+                  printf("Automatic contrast ON\n");
+               }
+               else 
+                  printf("Automatic contrast OFF\n");
+               break;
             case 'l':
                image_range(imageU,vmin,vmax);
                render_image_log(imageU,vmin,vmax,DISPimage);
@@ -325,6 +338,7 @@ flipfiles:
                   main_disp.resize(imageU.width(), imageU.height());
                }
                main_disp.set_title("FLIP! %s",filename);
+               if(AUTOMATIC_CONTRAST) image_range(imageU,vmin,vmax);
                render_image(imageU,vmin,vmax,DISPimage);
                DISPimage.display(main_disp);
                
