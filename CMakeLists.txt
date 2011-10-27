@@ -101,25 +101,25 @@ target_link_libraries(vflip IIOLIB ${LIBS} z m dl pthread)
 
 
 
-# OPENGL and GLUT
+## OPENGL and GLUT
+##
+##
+#FIND_PACKAGE(OPENGL REQUIRED)
+#IF(OPENGL_FOUND)
+#   include_directories(${OPENGL_INCLUDE_DIR})
+#   SET( LIBS ${LIBS} ${OPENGL_LIBRARIES})
+#ENDIF()
+#FIND_PACKAGE(GLUT REQUIRED)
+#IF(GLUT_FOUND)
+#   include_directories(${GLUT_INCLUDE_DIR})
+#   SET( LIBS ${LIBS} ${GLUT_LIBRARIES})
+#ENDIF()
 #
-#
-FIND_PACKAGE(OPENGL REQUIRED)
-IF(OPENGL_FOUND)
-   include_directories(${OPENGL_INCLUDE_DIR})
-   SET( LIBS ${LIBS} ${OPENGL_LIBRARIES})
-ENDIF()
-FIND_PACKAGE(GLUT REQUIRED)
-IF(GLUT_FOUND)
-   include_directories(${GLUT_INCLUDE_DIR})
-   SET( LIBS ${LIBS} ${GLUT_LIBRARIES})
-ENDIF()
-
-# VFLIPGL
-#
-#
-add_executable (ff vGL.c)
-target_link_libraries(ff IIOLIB ${LIBS})
+## VFLIPGL
+##
+##
+#add_executable (ff vGL.c)
+#target_link_libraries(ff IIOLIB ${LIBS})
 
 
 # INSTALL
