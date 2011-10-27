@@ -1,0 +1,4 @@
+By default installs in: ~/bin/
+
+cmake .
+make install
