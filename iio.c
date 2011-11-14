@@ -22,12 +22,13 @@
 
 // #includes {{{1
 
-#define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE 200113L
 
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 
@@ -52,7 +53,7 @@
 #  define I_CAN_HAS_FMEMOPEN 1
 #endif
 
-#ifdef _POSIX_C_SOURCE
+#ifdef _XOPEN_SOURCE
 #  define I_CAN_HAS_MKSTEMP 1
 #endif
 
@@ -863,51 +864,64 @@ static void *convert_data(void *src, int n, int dest_fmt, int src_fmt)
 
 static void unpack_nibbles_to_bytes(uint8_t out[2], uint8_t in)
 {
-	out[0] = (in & 0x0f);    //0b00001111
-	out[1] = (in & 0xf0)>>4; //0b11110000
+	out[1] = (in & 0x0f);    //0b00001111
+	out[0] = (in & 0xf0)>>4; //0b11110000
 }
 
 static void unpack_couples_to_bytes(uint8_t out[4], uint8_t in)
 {
-	out[0] = (in & 0x03);    //0b00000011
-	out[1] = (in & 0x0c)>>2; //0b00001100
-	out[0] = (in & 0x30)>>4; //0b00110000
+	out[3] = (in & 0x03);    //0b00000011
+	out[2] = (in & 0x0c)>>2; //0b00001100
+	out[1] = (in & 0x30)>>4; //0b00110000
 	out[0] = (in & 0xc0)>>6; //0b11000000
 }
 
 static void unpack_bits_to_bytes(uint8_t out[8], uint8_t in)
 {
-	out[0] = (in & 1) ? 1 : 0;
-	out[1] = (in & 2) ? 1 : 0;
-	out[2] = (in & 4) ? 1 : 0;
-	out[3] = (in & 8) ? 1 : 0;
-	out[4] = (in & 16) ? 1 : 0;
-	out[5] = (in & 32) ? 1 : 0;
-	out[6] = (in & 64) ? 1 : 0;
-	out[7] = (in & 128) ? 1 : 0;
+	out[7] = (in & 1) ? 1 : 0;
+	out[6] = (in & 2) ? 1 : 0;
+	out[5] = (in & 4) ? 1 : 0;
+	out[4] = (in & 8) ? 1 : 0;
+	out[3] = (in & 16) ? 1 : 0;
+	out[2] = (in & 32) ? 1 : 0;
+	out[1] = (in & 64) ? 1 : 0;
+	out[0] = (in & 128) ? 1 : 0;
 }
 
-static uint8_t *unpack_to_bytes(uint8_t *s, int n, int src_bits)
+static void unpack_to_bytes_here(uint8_t *dest, uint8_t *src, int n, int bits)
 {
-	assert(src_bits==1 || src_bits==2 || src_bits==4);
-	size_t unpack_factor = 8 / src_bits;
-	uint8_t *r = xmalloc(n * unpack_factor);
-	switch(src_bits) {
-	case 1: FORI(n)    unpack_bits_to_bytes(r + 8*i, s[i]); break;
-	case 2: FORI(n) unpack_couples_to_bytes(r + 4*i, s[i]); break;
-	case 4: FORI(n) unpack_nibbles_to_bytes(r + 2*i, s[i]); break;
+	fprintf(stderr, "unpacking %d bytes %d-fold\n", n, bits);
+	assert(bits==1 || bits==2 || bits==4);
+	size_t unpack_factor = 8 / bits;
+	switch(bits) {
+	case 1: FORI(n)    unpack_bits_to_bytes(dest + 8*i, src[i]); break;
+	case 2: FORI(n) unpack_couples_to_bytes(dest + 4*i, src[i]); break;
+	case 4: FORI(n) unpack_nibbles_to_bytes(dest + 2*i, src[i]); break;
 	default: error("very strange error");
 	}
-	xfree(s);
-	return r;
 }
+
+//static uint8_t *unpack_to_bytes(uint8_t *s, int n, int src_bits)
+//{
+//	assert(src_bits==1 || src_bits==2 || src_bits==4);
+//	size_t unpack_factor = 8 / src_bits;
+//	uint8_t *r = xmalloc(n * unpack_factor);
+//	switch(src_bits) {
+//	case 1: FORI(n)    unpack_bits_to_bytes(r + 8*i, s[i]); break;
+//	case 2: FORI(n) unpack_couples_to_bytes(r + 4*i, s[i]); break;
+//	case 4: FORI(n) unpack_nibbles_to_bytes(r + 2*i, s[i]); break;
+//	default: error("very strange error");
+//	}
+//	xfree(s);
+//	return r;
+//}
 
 static void iio_convert_samples(struct iio_image *x, int desired_type)
 {
-	IIO_DEBUG("converting from %s to %s\n", iio_strtyp(x->type), iio_strtyp(desired_type));
 	assert(!x->contiguous_data);
 	int source_type = normalize_type(x->type);
 	if (source_type == desired_type) return;
+	IIO_DEBUG("converting from %s to %s\n", iio_strtyp(x->type), iio_strtyp(desired_type));
 	int n = iio_image_number_of_samples(x);
 	x->data = convert_data(x->data, n, desired_type, source_type);
 	x->type = desired_type;
@@ -961,6 +975,39 @@ static void iio_hacky_uncolorize(struct iio_image *x)
 		}
 		break;
 	default: error("uncolorize type not supported");
+	}
+	x->pixel_dimension = 1;
+}
+
+// uncolorize
+static void iio_hacky_uncolorizea(struct iio_image *x)
+{
+	assert(!x->contiguous_data);
+	if (x->pixel_dimension != 4)
+		error("please, do not uncolorizea non-colora stuff");
+	assert(x->pixel_dimension == 4);
+	int source_type = normalize_type(x->type);
+	int n = iio_image_number_of_elements(x);
+	switch(source_type) {
+	case IIO_TYPE_UINT8: {
+		uint8_t (*xd)[4] = x->data;
+		uint8_t *r = xmalloc(n*sizeof*r);
+		FORI(n)
+			r[i] = .299*xd[i][0] + .587*xd[i][1] + .114*xd[i][2];
+		xfree(x->data);
+		x->data = r;
+		}
+		break;
+	case IIO_TYPE_FLOAT: {
+		float (*xd)[4] = x->data;
+		float *r = xmalloc(n*sizeof*r);
+		FORI(n)
+			r[i] = .299*xd[i][0] + .587*xd[i][1] + .114*xd[i][2];
+		xfree(x->data);
+		x->data = r;
+		}
+		break;
+	default: error("uncolorizea type not supported");
 	}
 	x->pixel_dimension = 1;
 }
@@ -1412,7 +1459,7 @@ static int read_whole_tiff(struct iio_image *x, const char *filename)
 	if(r)IIO_DEBUG("tiff get field spp %d (r=%d)\n", spp, r);
 
 	r = TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &bps);
-	if(!r) bps=8;
+	if(!r) bps=1;
 	if(r)IIO_DEBUG("tiff get field bps %d (r=%d)\n", bps, r);
 
 	r = TIFFGetField(tif, TIFFTAG_SAMPLEFORMAT, &fmt);
@@ -1454,29 +1501,39 @@ static int read_whole_tiff(struct iio_image *x, const char *filename)
 
 
 	// acquire memory block
-	uint32_t scanline_size = w * spp * (bps/8);
+	uint32_t scanline_size = (w * spp * bps)/8;
+	uint32_t uscanline_size = w * spp;
+	IIO_DEBUG("bps = %d\n", (int)bps);
 	IIO_DEBUG("spp = %d\n", (int)spp);
 	IIO_DEBUG("sls = %d\n", (int)scanline_size);
 	int sls = TIFFScanlineSize(tif);
 	IIO_DEBUG("sls(r) = %d\n", (int)sls);
+	assert((int)scanline_size == sls);
 	scanline_size = sls;
-	uint8_t *data = xmalloc(h * scanline_size);
-	FORI(h*scanline_size) data[i] = 42;
+	uint8_t *data = xmalloc(h * uscanline_size);
+	//FORI(h*scanline_size) data[i] = 42;
+	uint8_t *buf = xmalloc(scanline_size);
 
 	// dump scanline data
 	FORI(h) {
-		r = TIFFReadScanline(tif, data + i * scanline_size, i,  0);
+		//r = TIFFReadScanline(tif, data + i * scanline_size, i,  0);
+		r = TIFFReadScanline(tif, buf, i, 0);
 		if (r < 0) error("error reading tiff row %d/%d", i, (int)h);
+
+		if (bps < 8) {
+			fprintf(stderr, "unpacking %dth scanline\n", i);
+			unpack_to_bytes_here(data + i*uscanline_size, buf,
+					scanline_size, bps);
+			fmt_iio = IIO_TYPE_UINT8;
+		} else {
+			assert(uscanline_size == scanline_size);
+			memcpy(data + i*uscanline_size, buf, scanline_size);
+		}
 	}
 	TIFFClose(tif);
 
-	// unpack data (if needed)
-	if (bps < 8) {
-		uint32_t datasize = h * scanline_size;
-		uint8_t *tmp = unpack_to_bytes(data, datasize, bps);
-		data = tmp;
-		fmt_iio = IIO_TYPE_UINT8;
-	}
+
+	xfree(buf);
 
 	// fill struct fields
 	x->dimension = 2;
@@ -1892,8 +1949,8 @@ static int read_beheaded_juv(struct iio_image *x,
 	int w, h, r = sscanf(buf, "#UV {\n dimx %d dimy %d\n}\n", &w, &h);
 	if (r != 2) return -1;
 	size_t sf = sizeof(float);
-	float *u = xmalloc(w*h*sf); r = fread(u, w*h, sf, f); if(r!=w*h) goto e;
-	float *v = xmalloc(w*h*sf); r = fread(v, w*h, sf, f); if(r!=w*h) goto e;
+	float *u = xmalloc(w*h*sf); r = fread(u, sf, w*h, f); if(r!=w*h) goto e;
+	float *v = xmalloc(w*h*sf); r = fread(v, sf, w*h, f); if(r!=w*h) goto e;
 	float *uv = xmalloc(2*w*h*sf);
 	FORI(w*h) uv[2*i] = u[i];
 	FORI(w*h) uv[2*i+1] = v[i];
@@ -2434,11 +2491,10 @@ static void *rerror(const char *fmt, ...)
 #ifdef IIO_ABORT_ON_ERROR
 	va_list argp;
 	va_start(argp, fmt);
-	return error(fmt, argp);
+	error(fmt, argp);
 	va_end(argp);
-#else
-	return NULL;
 #endif
+	return NULL;
 }
 
 // 2D only
@@ -2734,8 +2790,10 @@ float *iio_read_image_float(const char *fname, int *w, int *h)
 	}
 	if (x->pixel_dimension == 3)
 		iio_hacky_uncolorize(x);
+	if (x->pixel_dimension == 4)
+		iio_hacky_uncolorizea(x);
 	if (x->pixel_dimension != 1)
-		return rerror("non-scalar image");
+		return rerror("non-scalarizable image");
 	*w = x->sizes[0];
 	*h = x->sizes[1];
 	iio_convert_samples(x, IIO_TYPE_FLOAT);
@@ -2826,6 +2884,9 @@ static bool string_suffix(const char *s, const char *suf)
 	return 0 == strcmp(suf, s + (len_s - len_suf));
 }
 
+// Note:
+// This function was written without being designed.  See file "saving.txt" for
+// an attempt at designing it.
 static void iio_save_image_default(const char *filename, struct iio_image *x)
 {
 	int typ = normalize_type(x->type);
@@ -2895,7 +2956,9 @@ static void iio_save_image_default(const char *filename, struct iio_image *x)
 				|| string_suffix(filename, ".png")
 				|| string_suffix(filename, ".PNG")
 				|| (typ==IIO_TYPE_UINT8&&x->pixel_dimension==4)
-				|| (typ==IIO_TYPE_FLOAT&&x->pixel_dimension==4)
+			//	|| (typ==IIO_TYPE_FLOAT&&x->pixel_dimension==4)
+				|| (typ==IIO_TYPE_UINT8&&x->pixel_dimension==2)
+			//	|| (typ==IIO_TYPE_FLOAT&&x->pixel_dimension==2)
 		   )
 		{
 			if (typ == IIO_TYPE_FLOAT) {
