@@ -49,8 +49,8 @@ void image_range(CImg<float> &U, float &vmin, float &vmax) {
    int i,j,c;
    for(c=0;c<U.spectrum() ;c++) for(i=0;i<U.width() ;i++) for(j=0;j<U.height(); j++) {
       if(isfinite(U(i,j,0,c))){
-         vmin = min(vmin,U(i,j,0,c));
-         vmax = max(vmax,U(i,j,0,c));
+         vmin = min(U(i,j,0,c),vmin);
+         vmax = max(U(i,j,0,c),vmax);
       }
    }
    printf("Range:  %g %g \n",vmin, vmax);
