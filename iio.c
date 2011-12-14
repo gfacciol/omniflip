@@ -18,6 +18,7 @@
 //
 // See file "iio.txt" for slightly more detailed documentation, and "iio.h" for
 // the API
+//
 
 
 // #includes {{{1
@@ -104,6 +105,7 @@
 #define IIO_FORMAT_FLO 19
 #define IIO_FORMAT_JUV 20
 #define IIO_FORMAT_LUM 21
+#define IIO_FORMAT_PCM 22
 #define IIO_FORMAT_UNRECOGNIZED (-1)
 
 //
@@ -669,6 +671,9 @@ static void *iio_image_get_data(struct iio_image *x) { return x->data; }
 
 // data conversion {{{1
 
+#define T0(x) ((x)>0?(x):0)
+#define T8(x) ((x)>0?((x)<0xff?(x):0xff):0)
+#define T6(x) ((x)>0?((x)<0xffff?(x):0xffff):0)
 
 #define CC(a,b) (77*(a)+(b)) // hash number of a conversion pair
 #define I8 IIO_TYPE_INT8
@@ -736,11 +741,11 @@ static void convert_datum(void *dest, void *src, int dest_fmt, int src_fmt)
 	case CC(I8,F8): *(  int8_t*)dest = *(double*)src; break;//iw810
 	case CC(I6,F8): *( int16_t*)dest = *(double*)src; break;//iw810
 	case CC(I2,F8): *( int32_t*)dest = *(double*)src; break;//iw810
-	case CC(U8,F4): *( uint8_t*)dest = *( float*)src; break;//iw810
-	case CC(U6,F4): *(uint16_t*)dest = *( float*)src; break;//iw810
+	case CC(U8,F4): *( uint8_t*)dest = T8(*( float*)src); break;//iw810
+	case CC(U6,F4): *(uint16_t*)dest = T6(*( float*)src); break;//iw810
 	case CC(U2,F4): *(uint32_t*)dest = *( float*)src; break;
-	case CC(U8,F8): *( uint8_t*)dest = *(double*)src; break;//iw810
-	case CC(U6,F8): *(uint16_t*)dest = *(double*)src; break;//iw810
+	case CC(U8,F8): *( uint8_t*)dest = T8(*(double*)src); break;//iw810
+	case CC(U6,F8): *(uint16_t*)dest = T6(*(double*)src); break;//iw810
 	case CC(U2,F8): *(uint32_t*)dest = *(double*)src; break;//iw810
 
 	// to float (typically lossless, except for large integers)
@@ -810,8 +815,8 @@ static void convert_datum(void *dest, void *src, int dest_fmt, int src_fmt)
 	case CC(I8,F6): *(  int8_t*)dest = *(longdouble*)src; break;
 	case CC(I6,F6): *( int16_t*)dest = *(longdouble*)src; break;
 	case CC(I2,F6): *( int32_t*)dest = *(longdouble*)src; break;
-	case CC(U8,F6): *( uint8_t*)dest = *(longdouble*)src; break;
-	case CC(U6,F6): *(uint16_t*)dest = *(longdouble*)src; break;
+	case CC(U8,F6): *( uint8_t*)dest = T8(*(longdouble*)src); break;
+	case CC(U6,F6): *(uint16_t*)dest = T6(*(longdouble*)src); break;
 	case CC(U2,F6): *(uint32_t*)dest = *(longdouble*)src; break;
 	case CC(F4,F6): *(   float*)dest = *(longdouble*)src; break;
 	case CC(F8,F6): *(  double*)dest = *(longdouble*)src; break;
@@ -1159,8 +1164,9 @@ static void delete_temporary_file(char *filename)
 {
 #ifdef NDEBUG
 	remove(filename);
+#else
+	IIO_DEBUG("WARNING: kept temporary file %s around\n", filename);
 #endif
-	//IIO_DEBUG("WARNING: kept temporary file %s around\n", filename);
 }
 
 
@@ -1579,7 +1585,6 @@ static int read_beheaded_tiff(struct iio_image *x,
 
 #endif//I_CAN_HAS_LIBTIFF
 
-
 // QNM readers {{{2
 
 #include <ctype.h>
@@ -1698,6 +1703,38 @@ static int read_beheaded_qnm(struct iio_image *x,
 	return 0;
 }
 
+// PCM reader {{{2
+// PCM is a file format to store complex float images
+// it is used by some people also for optical flow fields
+static int read_beheaded_pcm(struct iio_image *x,
+		FILE *f, char *header, int nheader)
+{
+	assert(nheader == 2);
+	int w, h;
+	float scale;
+	//menja_espais_i_comentaris(f);
+	if (1 != fscanf(f, " %d", &w)) return -1;
+	//menja_espais_i_comentaris(f);
+	if (1 != fscanf(f, " %d", &h)) return -2;
+	//menja_espais_i_comentaris(f);
+	if (1 != fscanf(f, " %g", &scale)) return -3;
+	if (!isspace(pilla_caracter_segur(f))) return -6;
+
+	fprintf(stderr, "%d PCM w h scale = %d %d %g\n", nheader, w, h, scale);
+
+	assert(sizeof(float) == 4);
+	float *data = xmalloc(w * h * 2 * sizeof(float));
+	int r = fread(data, sizeof(float), w * h * 2, f);
+	if (r != w * h * 2) return -7;
+	x->dimension = 2;
+	x->sizes[0] = w;
+	x->sizes[1] = h;
+	x->pixel_dimension = 2;
+	x->type = IIO_TYPE_FLOAT;
+	x->contiguous_data = false;
+	x->data = data;
+	return 0;
+}
 
 
 // RIM reader {{{2
@@ -1997,6 +2034,53 @@ static int read_beheaded_lum(struct iio_image *x,
 	return 0;
 }
 
+// BMP reader {{{2
+static int read_beheaded_bmp(struct iio_image *x,
+		FILE *f, char *header, int nheader)
+{
+	long len;
+	char *bmp = load_rest_of_file(&len, f, header, nheader);
+	uint32_t pix_offset = *(uint32_t*)(bmp+0xa);
+
+	error("BMP reader not yet finished");
+
+	xfree(bmp);
+
+	//x->dimension = 2;
+	//x->sizes[0] = dib_width;
+	//x->sizes[1] = dib_height;
+	//x->pixel_dimension = 1;
+	//x->type = IIO_TYPE_FLOAT;
+	//x->contiguous_data = false;
+	//x->data = data;
+	return 0;
+	//fprintf(stderr, "bmp reader\n");
+	//uint32_t aoffset = *(uint32_t*)(header+0xa);
+	//fprintf(stderr, "aoffset = %d\n", aoffset);
+	//assert(nheader == 14); // ignore the file header
+	//uint32_t dib_size = rim_getint(f, false);
+	//fprintf(stderr, "dib_size = %d\n", dib_size);
+	//if (dib_size != 40) error("only windows-like bitmaps ara supported");
+	//int32_t dib_width = rim_getint(f, false);
+	//int32_t dib_height = rim_getint(f, false);
+	//uint16_t dib_planes = rim_getshort(f, true);
+	//uint16_t dib_bpp = rim_getshort(f, true);
+	//uint32_t dib_compression = rim_getint(f, false);
+	//fprintf(stderr, "w,h = %dx%d, bpp=%d (p=%d), compression=%d\n",
+	//		dib_width, dib_height,
+	//		dib_bpp, dib_planes, dib_compression);
+	////if (dib_planes != 1) error("BMP READER: only one plane is supported (not %d)", dib_planes);
+	//if (dib_compression) error("compressed BMP are not supported");
+	//uint32_t dib_imsize = rim_getint(f, false);
+	//int32_t dib_hres = rim_getint(f, false);
+	//int32_t dib_vres = rim_getint(f, false);
+	//uint32_t dib_ncolors = rim_getint(f, false);
+	//uint32_t dib_nicolors = rim_getint(f, false);
+	//fprintf(stderr, "ncolors = %d\n", dib_ncolors);
+	//error("fins aquí hem arribat!");
+}
+
+
 // EXR reader {{{2
 
 #ifdef I_CAN_HAS_LIBEXR
@@ -2189,7 +2273,7 @@ static void iio_save_image_as_png(const char *filename, struct iio_image *x)
 
 static void iio_save_image_as_tiff(const char *filename, struct iio_image *x)
 {
-	fprintf(stderr, "saving image as tiff file \"%s\"\n", filename);
+	//fprintf(stderr, "saving image as tiff file \"%s\"\n", filename);
 	if (x->dimension != 2)
 		error("only 2d images can be saved as TIFFs");
 	TIFF *tif = TIFFOpen(filename, "w");
@@ -2365,6 +2449,15 @@ static int guess_format(FILE *f, char *buf, int *nbuf, int bufmax)
 	if (b[0]=='W' && b[1]=='E') return IIO_FORMAT_RIM;
 	if (b[0]=='V' && b[1]=='I') return IIO_FORMAT_RIM;
 
+	if (b[0]=='P' && b[1]=='C') return IIO_FORMAT_PCM;
+
+	if (b[0]=='B' && b[1]=='M') {
+		FORI(12) add_to_header_buffer(f, b, nbuf, bufmax);
+		return IIO_FORMAT_BMP;
+	}
+
+
+
 	b[2] = add_to_header_buffer(f, b, nbuf, bufmax);
 	b[3] = add_to_header_buffer(f, b, nbuf, bufmax);
 
@@ -2424,6 +2517,8 @@ int read_beheaded_image(struct iio_image *x, FILE *f, char *h, int hn, int fmt)
 	case IIO_FORMAT_FLO:   return read_beheaded_flo (x, f, h, hn);
 	case IIO_FORMAT_JUV:   return read_beheaded_juv (x, f, h, hn);
 	case IIO_FORMAT_LUM:   return read_beheaded_lum (x, f, h, hn);
+	case IIO_FORMAT_PCM:   return read_beheaded_pcm (x, f, h, hn);
+	case IIO_FORMAT_BMP:   return read_beheaded_bmp (x, f, h, hn);
 
 #ifdef I_CAN_HAS_LIBPNG
 	case IIO_FORMAT_PNG:   return read_beheaded_png (x, f, h, hn);
@@ -2442,7 +2537,6 @@ int read_beheaded_image(struct iio_image *x, FILE *f, char *h, int hn, int fmt)
 #endif
 
 		/*
-	case IIO_FORMAT_BMP:   return read_beheaded_bmp (x, f, h, hn);
 	case IIO_FORMAT_JP2:   return read_beheaded_jp2 (x, f, h, hn);
 	case IIO_FORMAT_VTK:   return read_beheaded_vtk (x, f, h, hn);
 	case IIO_FORMAT_CIMG:  return read_beheaded_cimg(x, f, h, hn);
@@ -2916,7 +3010,7 @@ static bool these_floats_are_actually_bytes(float *t, int n)
 //// returns the first argument, or NULL
 //static const char *hassufix(const char *haystack, const char *needle)
 //{
-//	const char *r = 
+//	const char *r =
 //}
 
 static bool string_suffix(const char *s, const char *suf)
@@ -2952,7 +3046,7 @@ static void iio_save_image_default(const char *filename, struct iio_image *x)
 		return;
 		//error("de moment només escrivim gris ó RGB");
 	}
-	if (typ != IIO_TYPE_FLOAT && typ != IIO_TYPE_UINT8 && typ != IIO_TYPE_INT16)
+	if (typ != IIO_TYPE_FLOAT && typ != IIO_TYPE_UINT8 && typ != IIO_TYPE_INT16 && typ != IIO_TYPE_INT8)
 		error("de moment només fem floats o bytes (got %d)",typ);
 	int nsamp = iio_image_number_of_samples(x);
 	if (typ == IIO_TYPE_FLOAT &&

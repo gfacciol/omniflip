@@ -3,6 +3,7 @@
 #include <assert.h>
 #include "CImg.h"
 #include <cmath>
+#include "libgen.h"
 using std::isfinite;
 
 extern "C" {
@@ -167,7 +168,7 @@ int main(int argc,char **argv) {
 
 
    CImgDisplay main_disp(DISPimage,"Click a point",0);
-   main_disp.set_title("Click a point %s",filename);
+   main_disp.set_title("Click a point %s",basename(filename));
    main_disp.resize(imageU.width(), imageU.height());
    main_disp._wheel = wheel;
 
@@ -228,9 +229,9 @@ int main(int argc,char **argv) {
 
          if(x>=0 && y>=0 && x<imageU.width() && y<imageU.height()){
             if( imageU.spectrum()>1)
-               snprintf(str,1024, "(%s) p:%d,%d v:[%g,%g,%g]",filename, x, y, imageU( x, y,0,0),  imageU( x, y,0,1),  imageU( x, y,0,2) );
+               snprintf(str,1024, "(%03d,%03d): %g,%g,%g :%s ",x, y, imageU( x, y,0,0),  imageU( x, y,0,1),  imageU( x, y,0,2),basename(filename)  );
             else
-               snprintf(str,1024, "(%s) p:%d,%d v:[%g]", filename, x, y, imageU( x, y,0,0) );
+               snprintf(str,1024, "(%03d,%03d): %g :%s", x, y, imageU( x, y,0,0) ,basename(filename));
          }
          main_disp.set_title("%s",str);
       }
@@ -337,11 +338,14 @@ flipfiles:
                   DISPimage.resize(imageU.width(), imageU.height());
                   main_disp.resize(imageU.width(), imageU.height());
                }
-               main_disp.set_title("FLIP! %s",filename);
+               main_disp.set_title("FLIP! %s",basename(filename));
                if(AUTOMATIC_CONTRAST) image_range(imageU,vmin,vmax);
                render_image(imageU,vmin,vmax,DISPimage);
                DISPimage.display(main_disp);
                
+               // force the re-display of pixel information
+               mx =-1;
+
                break;
             default:
                break;
