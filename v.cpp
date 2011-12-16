@@ -32,7 +32,7 @@ void printhelp() {
    printf(" <space>     : go to the next image\n");
    printf(" <backspace> : go to the previous image\n");
    printf(" scroll wheel: move boundary of the range\n");
-   printf(" click       : inspect pixel values\n");
+   printf(" left click  : distance tool\n");
    printf(" c : reset contrast range\n");
    printf(" C : set/unset automatic contrast\n");
    printf(" l : log of the range\n");
@@ -133,6 +133,9 @@ int main(int argc,char **argv) {
    int mx=-1;
    int move_max=1;
 
+   int dragging=0;
+   int px0=0,py0=0;
+
 
    if(argc<=1) {
       printf("Usage: %s files\n", argv[0]);
@@ -211,12 +214,6 @@ int main(int argc,char **argv) {
       DISPimage.display(main_disp);
 
 
-
-      /* Button events control the selection of points */
-//      if (main_disp.button()) { 
-//      }
-
-
       /* Movement event */
       int nmx = main_disp.mouse_x();
       int nmy = main_disp.mouse_y();
@@ -236,6 +233,24 @@ int main(int argc,char **argv) {
          main_disp.set_title("%s",str);
       }
 
+
+      /* Button events for line selection*/
+      if (main_disp.button()&1) { 
+         // start dragging
+         if (dragging==0) { 
+            px0=nmx;
+            py0=nmy;
+         } 
+         const unsigned char green[] = { 10,255,20 };
+         CImg<int> tmp(DISPimage);
+         tmp.draw_line(px0,py0,nmx,nmy,green).draw_text((px0+nmx)/2,(py0+nmy)/2,"%.2f",green,0,1,15,hypot (px0-nmx, py0-nmy)).display(main_disp);
+         dragging=1;
+      } else {
+         // end dragging
+         if (dragging==1) {
+         }
+         dragging=0;
+      }
 
 
 
