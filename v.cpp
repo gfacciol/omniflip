@@ -88,31 +88,33 @@ void render_image_log(CImg<float> &U, float mrange, float Mrange, CImg<unsigned 
 }
 
 
+
+int colorremap[3] = {0,1,2};
+
 void render_image(CImg<float> &U, float mrange, float Mrange, CImg<unsigned char> &disp) {
    int i,j,c;
    float scale_range = 255/(Mrange - mrange);
+   float curr;
 
-   for(c=0;c<min(U.spectrum(),3) ;c++) for(i=0;i<U.width() ;i++) for(j=0;j<U.height(); j++) {
-      //      float curr = min(max(U(i,j,0,c),mrange),Mrange);
-      float curr = (min(max(U(i,j,0,c),mrange),Mrange) -mrange) * scale_range;
+//   // validate the current remap
+//   for (c=0;c<3; c++) 
+//      colorremap[c] = c % U.spectrum();
 
-      if(U.spectrum()<3) {
-         disp(i,j,0,0) = (unsigned char) curr;
-         disp(i,j,0,1) = (unsigned char) curr;
-         disp(i,j,0,2) = (unsigned char) curr;
-      }
-      else {
+   // for each color
+   for(c=0;c<3 ;c++) {
+      // compute new color, with safety check
+      int newc = colorremap[c] % U.spectrum();
+      for(i=0;i<U.width() ;i++) for(j=0;j<U.height(); j++) {
+         if(newc>=0)     // reserve the negative indices for NONE 
+            curr = (min(max(U(i,j,0,newc),mrange),Mrange) -mrange) * scale_range;
+         else 
+            curr =0;
          disp(i,j,0,c) = (unsigned char) curr;
       }
    }
-
 }
 
-
 /* GLOBAL VARIABLES */
-
-
-
 
 
 
@@ -235,7 +237,7 @@ int main(int argc,char **argv) {
 
 
       /* Button events for line selection*/
-      if (main_disp.button()&1) { 
+      if (main_disp.button()&1) {
          // start dragging
          if (dragging==0) { 
             px0=nmx;
@@ -258,7 +260,25 @@ int main(int argc,char **argv) {
       char key = main_disp.key();
       if ( key ) {
          switch( key ) {
-            case 's':
+            case 'r': case 'R':
+               colorremap[0] = (colorremap[0]+2)%(imageU.spectrum()+1)-1;
+               printf("channel %d -> color %d\n", colorremap[0],0);
+               render_image(imageU,vmin,vmax,DISPimage);
+               DISPimage.display(main_disp);
+               break;
+            case 'g': case 'G':
+               colorremap[1] = (colorremap[1]+2)%(imageU.spectrum()+1)-1;
+               printf("channel %d -> color %d\n", colorremap[1],1);
+               render_image(imageU,vmin,vmax,DISPimage);
+               DISPimage.display(main_disp);
+               break;
+            case 'b': case 'B':
+               colorremap[2] = (colorremap[2]+2)%(imageU.spectrum()+1)-1;
+               printf("channel %d -> color %d\n", colorremap[2],2);
+               render_image(imageU,vmin,vmax,DISPimage);
+               DISPimage.display(main_disp);
+               break;
+            case 's': case 'S':
                main_disp.set_title("SPLAT! Saving snapshot.png");
                DISPimage.save("snapshot.png");
                main_disp.set_title("SPLAT! snapshot.png saved");
@@ -279,12 +299,12 @@ int main(int argc,char **argv) {
                else 
                   printf("Automatic contrast OFF\n");
                break;
-            case 'l':
+            case 'l': case 'L':
                image_range(imageU,vmin,vmax);
                render_image_log(imageU,vmin,vmax,DISPimage);
                DISPimage.display(main_disp);
                break;
-            case 'q':
+            case 'q': case 'Q':
                exit(0);
                break;
             case 'm':
@@ -297,7 +317,7 @@ int main(int argc,char **argv) {
                printf("moving the Maximum\n");
                move_max =1;
                break;
-            case 'h':
+            case 'h': case 'H':
                printhelp();
                break;
 
