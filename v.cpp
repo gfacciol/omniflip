@@ -227,13 +227,14 @@ int main(int argc,char **argv) {
          char str[1024];
 
          if(x>=0 && y>=0 && x<imageU.width() && y<imageU.height()){
-            if( imageU.spectrum()>1)
+            if( imageU.spectrum()>1) {
                if(imageU.spectrum()==2)
                   snprintf(str,1024, "(%03d,%03d): %g,%g :%s ",x, y, imageU( x, y,0,0),  imageU( x, y,0,1) ,basename(filename)  );
                else if(imageU.spectrum()==3)
                   snprintf(str,1024, "(%03d,%03d): %g,%g,%g :%s ",x, y, imageU( x, y,0,0),  imageU( x, y,0,1),  imageU( x, y,0,2),basename(filename)  );
                else if(imageU.spectrum()>=4)
                   snprintf(str,1024, "(%03d,%03d): %g,%g,%g,%g :%s ",x, y, imageU( x, y,0,0),  imageU( x, y,0,1),  imageU( x, y,0,2), imageU( x, y,0,3),basename(filename)  );
+            }
             else
                snprintf(str,1024, "(%03d,%03d): %g :%s", x, y, imageU( x, y,0,0) ,basename(filename));
          }
