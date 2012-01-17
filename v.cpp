@@ -24,6 +24,7 @@ int file_exists (char * fileName)
    int i = stat ( fileName, &buf );
    /* File found */
    if ( i == 0 ) { return 1; }
+   if (fileName[0] == '-') {return 1; } /* stdin */
    return 0;
 }
 
