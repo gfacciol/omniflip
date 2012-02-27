@@ -32,14 +32,13 @@ int file_exists (char * fileName)
 void printhelp() {
    printf(" <space>     : go to the next image\n");
    printf(" <backspace> : go to the previous image\n");
-   printf(" scroll wheel: move boundary of the range\n");
+   printf(" scroll wheel: move center of the image range\n");
+   printf(" <shift>+scroll wheel: change width of the image range\n");
    printf(" left click  : distance tool\n");
    printf(" c : reset contrast range\n");
    printf(" C : set/unset automatic contrast\n");
    printf(" l : log of the range\n");
    printf(" s : save snapshot000.png\n");
-   printf(" m : select the minimum of the range to move\n");
-   printf(" M : select the Maximum of the range to move\n");
    printf(" q : quit\n");
 
 }
@@ -122,7 +121,8 @@ void render_image(CImg<float> &U, float mrange, float Mrange, CImg<unsigned char
 int main(int argc,char **argv) {
    CImg<float> imageU, altimageU;
    int w, h, pixeldim;
-   float vmax,vmin;
+   float vmax,vmin;           // max and min value of the current display range 
+   float image_max,image_min; // max and min of the current image
 
    // "GLOBAL" VARIABLES
    char **filenames=argv+1;
@@ -134,7 +134,6 @@ int main(int argc,char **argv) {
    int wheel=0;
    int my=-1;
    int mx=-1;
-   int move_max=1;
 
    int dragging=0;
    int px0=0,py0=0;
@@ -170,6 +169,9 @@ int main(int argc,char **argv) {
 
    CImg<unsigned char> DISPimage (imageU.width(), imageU.height(), 1, 3 ); // initialize the disp image
    image_range(imageU,vmin,vmax);
+   image_max = vmax;
+   image_min = vmin;
+
    render_image(imageU,vmin,vmax,DISPimage);
 
 
@@ -189,32 +191,58 @@ int main(int argc,char **argv) {
       int new_wheel = main_disp.wheel();
       if ( new_wheel != wheel )  {
 
-         float d= (vmax-vmin)*.2;
-         if(move_max){
+         float v_center = (vmax+vmin)/2;
+         float v_radius = (vmax-vmin)/2;
+
+         // modify the radius of the range
+         if(main_disp.is_keySHIFTLEFT() || main_disp.is_keySHIFTRIGHT())
+         {
+            float d=  (vmax-vmin)*.1;
             if(new_wheel<wheel) {
-               vmax-=d;
+               v_radius-=d;
             } else {
-               vmax+=d;
+               v_radius+=d;
+            }
+            v_radius=max(v_radius,0);
+         }
+         // modify the center of the range
+         else
+         {
+            float d= (vmax-vmin)*.1;
+            if(new_wheel<wheel) {
+               if(vmax-d>image_min) // bound
+                  v_center-=d;
+            } else {
+               if(vmin+d<image_max) // bound
+                  v_center+=d;
             }
          }
-         else{
-            if(new_wheel<wheel) {
-               vmin-=d;
-            } else {
-               vmin+=d;
-            }
-         }
+         vmax=v_center+v_radius;
+         vmin=v_center-v_radius;
+
          wheel=new_wheel;
+
+         // display some info int the title bar
          {
             char str[1024];
             snprintf(str, 1024,"r:[%g,%g]", vmin,vmax);
             main_disp.set_title("%s",str);
          }
 
+         // recompute the image with the new range
          render_image(imageU,vmin,vmax,DISPimage);
+
+         //DISPimage.display(main_disp);
+         // display the range data in the upper left corner of the image.
+         const unsigned char green[] = { 10,255,20 };
+         CImg<int> tmp(DISPimage);
+         tmp.draw_text(0,0,"DISPLAY RANGE \ncenter val. %.2f \nradius %.2f",green,0,1,15, v_center, v_radius).display(main_disp);
+
+      }
+      else
+      {
          DISPimage.display(main_disp);
       }
-      DISPimage.display(main_disp);
 
 
       /* Movement event */
@@ -292,6 +320,8 @@ int main(int argc,char **argv) {
                break;
             case 'c':
                image_range(imageU,vmin,vmax);
+               image_max = vmax;
+               image_min = vmin;
                render_image(imageU,vmin,vmax,DISPimage);
                DISPimage.display(main_disp);
                break;
@@ -299,6 +329,8 @@ int main(int argc,char **argv) {
                AUTOMATIC_CONTRAST=(AUTOMATIC_CONTRAST+1)%2;
                if(AUTOMATIC_CONTRAST) {
                   image_range(imageU,vmin,vmax);
+                  image_max = vmax;
+                  image_min = vmin;
                   render_image(imageU,vmin,vmax,DISPimage);
                   DISPimage.display(main_disp);
                   printf("Automatic contrast ON\n");
@@ -308,21 +340,13 @@ int main(int argc,char **argv) {
                break;
             case 'l': case 'L':
                image_range(imageU,vmin,vmax);
+               image_max = vmax;
+               image_min = vmin;
                render_image_log(imageU,vmin,vmax,DISPimage);
                DISPimage.display(main_disp);
                break;
             case 'q': case 'Q':
                exit(0);
-               break;
-            case 'm':
-               main_disp.set_title("moving the minimum");
-               printf("moving the minimum\n");
-               move_max =0;
-               break;
-            case 'M':
-               main_disp.set_title("moving the Maximum");
-               printf("moving the Maximum\n");
-               move_max =1;
                break;
             case 'h': case 'H':
                printhelp();
@@ -381,7 +405,11 @@ flipfiles:
                   main_disp.resize(imageU.width(), imageU.height());
                }
                main_disp.set_title("FLIP! %s",basename(filename));
-               if(AUTOMATIC_CONTRAST) image_range(imageU,vmin,vmax);
+               if(AUTOMATIC_CONTRAST) {
+                  image_range(imageU,vmin,vmax);
+                  image_max = vmax;
+                  image_min = vmin;
+               }
                render_image(imageU,vmin,vmax,DISPimage);
                DISPimage.display(main_disp);
                

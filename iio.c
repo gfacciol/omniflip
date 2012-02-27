@@ -23,8 +23,6 @@
 
 // #includes {{{1
 
-#define _POSIX_C_SOURCE 200113L
-
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -50,11 +48,11 @@
 // configuration
 //
 
-#ifdef _GNU_SOURCE
+#if _POSIX_C_SOURCE >= 200809L
 #  define I_CAN_HAS_FMEMOPEN 1
 #endif
 
-#ifdef _XOPEN_SOURCE
+#if _POSIX_C_SOURCE >= 200112L
 #  define I_CAN_HAS_MKSTEMP 1
 #endif
 
@@ -1272,6 +1270,23 @@ static bool find_dimensions_in_string_3d(int out[3], char *s)
 	return true;
 }
 
+// todo make this function more general, or a front-end to a general
+// "data trasposition" routine
+static void break_pixels_float(float *broken, float *clear, int n, int pd)
+{
+	fprintf(stderr, "breaking %d %d-dimensional vectors\n", n, pd);
+	FORI(n) FORL(pd)
+		broken[n*l + i] = clear[pd*i + l];
+}
+
+static void
+recover_broken_pixels_float(float *clear, float *broken, int n, int pd)
+{
+	fprintf(stderr, "unbreaking %d %d-dimensional vectors\n", n, pd);
+	FORL(pd) FORI(n)
+		clear[pd*i + l] = broken[n*l + i];
+}
+
 // individual format readers {{{1
 // PNG reader {{{2
 
@@ -1987,8 +2002,8 @@ static int read_beheaded_juv(struct iio_image *x,
 	int w, h, r = sscanf(buf, "#UV {\n dimx %d dimy %d\n}\n", &w, &h);
 	if (r != 2) return -1;
 	size_t sf = sizeof(float);
-	float *u = xmalloc(w*h*sf); r = fread(u, sf, w*h, f); if(r!=w*h) goto e;
-	float *v = xmalloc(w*h*sf); r = fread(v, sf, w*h, f); if(r!=w*h) goto e;
+	float *u = xmalloc(w*h*sf); r = fread(u, sf, w*h, f);if(r!=w*h)return-2;
+	float *v = xmalloc(w*h*sf); r = fread(v, sf, w*h, f);if(r!=w*h)return-2;
 	float *uv = xmalloc(2*w*h*sf);
 	FORI(w*h) uv[2*i] = u[i];
 	FORI(w*h) uv[2*i+1] = v[i];
@@ -2001,7 +2016,6 @@ static int read_beheaded_juv(struct iio_image *x,
 	x->contiguous_data = false;
 	x->data = uv;
 	return 0;
-e:	return -2;
 }
 
 // LUM reader {{{2
@@ -2404,6 +2418,56 @@ static void iio_save_image_as_flo(const char *filename, struct iio_image *x)
 	xfclose(f);
 }
 
+// RIM writer {{{2
+
+static void rim_putshort(FILE *f, uint16_t n)
+{
+	int a = n % 0x100;
+	int b = n / 0x100;
+	assert(a >= 0);
+	assert(b >= 0);
+	assert(a < 256);
+	assert(b < 256);
+	fputc(b, f);
+	fputc(a, f);
+}
+
+static void iio_save_image_as_rim_fimage(const char *fname, struct iio_image *x)
+{
+	if (x->type != IIO_TYPE_FLOAT) error("fimage expects float data");
+	if (x->dimension != 2) error("fimage expects 2d image");
+	if (x->pixel_dimension != 1) error("fimage expects gray image");
+	FILE *f = xfopen(fname, "w");
+	fputc('I', f);
+	fputc('R', f);
+	rim_putshort(f, 2);
+	rim_putshort(f, x->sizes[0]);
+	rim_putshort(f, x->sizes[1]);
+	FORI(29) rim_putshort(f, 0);
+	int r = fwrite(x->data, sizeof(float), x->sizes[0]*x->sizes[1], f);
+	if (r != x->sizes[0]*x->sizes[1])
+		error("could not write an entire fimage for some reason");
+	xfclose(f);
+}
+
+static void iio_save_image_as_rim_cimage(const char *fname, struct iio_image *x)
+{
+	if (x->type != IIO_TYPE_UINT8) error("cimage expects byte data");
+	if (x->dimension != 2) error("cimage expects 2d image");
+	if (x->pixel_dimension != 1) error("cimage expects gray image");
+	FILE *f = xfopen(fname, "w");
+	fputc('M', f);
+	fputc('I', f);
+	rim_putshort(f, 2);
+	rim_putshort(f, x->sizes[0]);
+	rim_putshort(f, x->sizes[1]);
+	FORI(29) rim_putshort(f, 0);
+	int r = fwrite(x->data, 1, x->sizes[0]*x->sizes[1], f);
+	if (r != x->sizes[0]*x->sizes[1])
+		error("could not write an entire cimage for some reason");
+	xfclose(f);
+}
+
 // guess format using magic {{{1
 
 
@@ -2667,6 +2731,16 @@ float *iio_read_image_float_vec(const char *fname, int *w, int *h, int *pd)
 	*pd = x->pixel_dimension;
 	iio_convert_samples(x, IIO_TYPE_FLOAT);
 	return x->data;
+}
+
+// API 2D
+float *iio_read_image_float_split(const char *fname, int *w, int *h, int *pd)
+{
+	float *r = iio_read_image_float_vec(fname, w, h, pd);
+	float *rbroken = xmalloc(*w**h**pd*sizeof*rbroken);
+	break_pixels_float(rbroken, r, *w**h, *pd);
+	xfree(r);
+	return rbroken;
 }
 
 // API 2D
@@ -3040,6 +3114,16 @@ static void iio_save_image_default(const char *filename, struct iio_image *x)
 		iio_save_image_as_flo(filename, x);
 		return;
 	}
+	if (string_suffix(filename, ".mw") && typ == IIO_TYPE_FLOAT
+				&& x->pixel_dimension == 1) {
+		iio_save_image_as_rim_fimage(filename, x);
+		return;
+	}
+	if (string_suffix(filename, ".mw") && typ == IIO_TYPE_UINT8
+				&& x->pixel_dimension == 1) {
+		iio_save_image_as_rim_cimage(filename, x);
+		return;
+	}
 	if (x->pixel_dimension != 1 && x->pixel_dimension != 3 && x->pixel_dimension != 4 && x->pixel_dimension != 2 )
 	{
 		iio_save_image_as_tiff_smarter(filename, x);
@@ -3223,6 +3307,15 @@ void iio_save_image_float_vec(char *filename, float *data,
 	x->data = data;
 	x->contiguous_data = false;
 	iio_save_image_default(filename, x);
+}
+
+void iio_save_image_float_split(char *filename, float *data,
+		int w, int h, int pd)
+{
+	float *rdata = xmalloc(w*h*pd*sizeof*rdata);
+	recover_broken_pixels_float(rdata, data, w*h, pd);
+	iio_save_image_float_vec(filename, rdata, w, h, pd);
+	xfree(rdata);
 }
 
 void iio_save_image_double_vec(char *filename, double *data,
