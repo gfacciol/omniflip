@@ -175,12 +175,18 @@ int main(int argc,char **argv) {
    render_image(imageU,vmin,vmax,DISPimage);
 
 
+   // hidden profile display
+   CImgDisplay profile_disp(500,200,"Color profile of the X-axis",0,false,true);
+
+
+   // main display
    CImgDisplay main_disp(DISPimage,"Click a point",0);
    main_disp.set_title("Click a point %s",basename(filename));
    main_disp.resize(imageU.width(), imageU.height());
    main_disp._wheel = wheel;
 
    printhelp();
+
 
 
    /* main loop */
@@ -239,10 +245,6 @@ int main(int argc,char **argv) {
          tmp.draw_text(0,0,"DISPLAY RANGE \ncenter val. %.2f \nradius %.2f",green,0,1,15, v_center, v_radius).display(main_disp);
 
       }
-      else
-      {
-         DISPimage.display(main_disp);
-      }
 
 
       /* Movement event */
@@ -253,9 +255,10 @@ int main(int argc,char **argv) {
          int y = nmy;
          mx = nmx;
          my = nmy;
-         char str[1024];
 
+         // IF WE ARE INSIDE THE IMAGE
          if(x>=0 && y>=0 && x<imageU.width() && y<imageU.height()){
+            char str[1024];
             if( imageU.spectrum()>1) {
                if(imageU.spectrum()==2)
                   snprintf(str,1024, "(%03d,%03d): %g,%g :%s ",x, y, imageU( x, y,0,0),  imageU( x, y,0,1) ,basename(filename)  );
@@ -266,8 +269,39 @@ int main(int argc,char **argv) {
             }
             else
                snprintf(str,1024, "(%03d,%03d): %g :%s", x, y, imageU( x, y,0,0) ,basename(filename));
+
+            // UPDATE TITLE
+            main_disp.set_title("%s",str);
+
+
+            // IF SHIFT IS PRESSED modify the center of the range with the value of the current pixel
+            if(main_disp.is_keySHIFTLEFT() || main_disp.is_keySHIFTRIGHT())
+            {
+               float v_center = (vmax+vmin)/2;
+               float v_radius = (vmax-vmin)/2;
+
+               // new value
+               v_center = imageU( x, y,0,0);
+
+               vmax=v_center+v_radius;
+               vmin=v_center-v_radius;
+
+               // recompute the image with the new range
+               render_image(imageU,vmin,vmax,DISPimage);
+
+               //DISPimage.display(main_disp);
+               // display the range data in the upper left corner of the image.
+               const unsigned char green[] = { 10,255,20 };
+               CImg<int> tmp(DISPimage);
+               tmp.draw_text(0,0,"DISPLAY RANGE \ncenter val. %.2f \nradius %.2f",green,0,1,15, v_center, v_radius).display(main_disp);
+
+            }
+            else
+            {
+               DISPimage.display(main_disp);
+            }
+
          }
-         main_disp.set_title("%s",str);
       }
 
 
@@ -288,6 +322,37 @@ int main(int argc,char **argv) {
          }
          dragging=0;
       }
+
+
+
+      if(! profile_disp.is_closed()) {
+         int x=nmx;
+         int y=nmy;
+         if( x>=0 && y>=0 && x<imageU.width() && y<imageU.height()) {
+         unsigned long hatch = 0xF0F0F0F0;
+         const unsigned char
+            red[]   = { 255,0,0 },
+            green[] = { 0,255,0 },
+            blue [] = { 0,0,255 },
+            black[] = { 0,0,0 };
+ //        const unsigned int
+ //           val_red   = imageU(x,y,0),
+ //                     val_green = imageU(x,y,1),
+ //                     val_blue  = imageU(x,y,2);
+
+         // Create and display the image of the intensity profile
+         CImg<unsigned char>(profile_disp.width(),profile_disp.height(),1,3,255).
+            draw_grid(-50*100.0f/imageU.width(),-50*100.0f/256,0,0,false,false,black,0.2f,0xCCCCCCCC,0xCCCCCCCC).
+//            draw_axes(0,imageU.width()-1.0f,255.0f,0.0f,black).
+            draw_graph(imageU.get_shared_line(y,0,0),red,1,1,0,vmin,vmax,1).
+//            draw_graph(imageU.get_shared_line(y,0,1),green,1,1,0,vmin,vmax,1).
+//            draw_graph(imageU.get_shared_line(y,0,2),blue,1,1,0,vmin,vmax,1).
+//            draw_text(30,5,"Pixel (%d,%d)={%d %d %d}",black,0,1,13, nmx,nmy,val_red,val_green,val_blue).
+ //           draw_line(x,0,x,profile_disp.height()-1,black,0.5f,hatch=cimg::rol(hatch)).
+            display(profile_disp);
+         }
+      }
+
 
 
 
@@ -317,6 +382,14 @@ int main(int argc,char **argv) {
                main_disp.set_title("SPLAT! Saving snapshot.png");
                DISPimage.save("snapshot.png");
                main_disp.set_title("SPLAT! snapshot.png saved");
+               break;
+            case 'p':
+               profile_disp.move(main_disp.window_x() + imageU.width(),main_disp.window_y());
+               profile_disp.show();
+               main_disp.close();
+               main_disp.show();
+               profile_disp.flush();
+               main_disp.flush();
                break;
             case 'c':
                image_range(imageU,vmin,vmax);
