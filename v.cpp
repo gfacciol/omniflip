@@ -280,8 +280,10 @@ int main(int argc,char **argv) {
                float v_center = (vmax+vmin)/2;
                float v_radius = (vmax-vmin)/2;
 
-               // new value
-               v_center = imageU( x, y,0,0);
+               // new center value
+               // v_center = imageU( x, y,0,0);
+               int cw=1;
+               v_center = imageU.get_crop (x-cw, y-cw, x+cw, y+cw).mean(); //smooth movement
 
                vmax=v_center+v_radius;
                vmin=v_center-v_radius;
