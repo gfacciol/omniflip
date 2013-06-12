@@ -39,6 +39,7 @@ void printhelp() {
    printf(" C : set/unset automatic contrast\n");
    printf(" l : log of the range\n");
    printf(" s : save snapshot000.png\n");
+   printf(" u : hide/show HUD\n");
    printf(" q : quit\n");
 
 }
@@ -115,6 +116,7 @@ void render_image(CImg<float> &U, float mrange, float Mrange, CImg<unsigned char
 }
 
 /* GLOBAL VARIABLES */
+int HUD_VISIBLE=1;
 
 
 
@@ -230,11 +232,11 @@ int main(int argc,char **argv) {
             main_disp.set_title("%s %s %s",strpos,strval,strnam);
 
 
-            // IF SHIFT IS PRESSED modify the center of the range with the value of the current pixel
-            if(main_disp.is_keySHIFTLEFT() || main_disp.is_keySHIFTRIGHT())
-            {
                float v_center = (vmax+vmin)/2;
                float v_radius = (vmax-vmin)/2;
+            // IF SHIFT IS PRESSED modify the center of the range with the value of the current pixel
+            if(main_disp.is_keySHIFTLEFT() || main_disp.is_keySHIFTRIGHT() )
+            {
 
                // new center value
                // v_center = imageU( x, y,0,0);
@@ -259,10 +261,14 @@ int main(int argc,char **argv) {
 
                //DISPimage.display(main_disp);
                // display the range data in the upper left corner of the image.
+            }
+
+            // IF SHIFT IS PRESSED modify the center of the range with the value of the current pixel
+            if(main_disp.is_keySHIFTLEFT() || main_disp.is_keySHIFTRIGHT() || HUD_VISIBLE) {
 
                const unsigned char green[] = { 10,255,20 };
                CImg<int> tmp(DISPimage);
-               tmp.draw_text(0,0,"%s %s\nval. %s\nDISPLAY RANGE \ncenter val. %.2f \nradius %.2f",green,0,1,15,strpos, strnam, strval, v_center, v_radius).display(main_disp);
+               tmp.draw_text(0,0,"%s %s\nval. %s\nDISPLAY RANGE \ncenter val. %.2f \nradius %.2f \nvmin %.2f vmax %.2f",green,0,1,15,strpos, strnam, strval, v_center, v_radius,vmin,vmax).display(main_disp);
 
             }
             else
@@ -334,7 +340,7 @@ int main(int argc,char **argv) {
                snprintf(strval,1024, "%g", imageU( mx, my,0,0) );
          const unsigned char green[] = { 10,255,20 };
          CImg<int> tmp(DISPimage);
-         tmp.draw_text(0,0,"%s %s\nval. %s\nDISPLAY RANGE \ncenter val. %.2f \nradius %.2f",green,0,1,15,strpos, strnam, strval, v_center, v_radius).display(main_disp);
+         tmp.draw_text(0,0,"%s %s\nval. %s\nDISPLAY RANGE \ncenter val. %.2f \nradius %.2f \nvmin %.2f vmax %.2f",green,0,1,15,strpos, strnam, strval, v_center, v_radius,vmin,vmax).display(main_disp);
 
       }
 
@@ -457,6 +463,10 @@ int main(int argc,char **argv) {
                break;
             case 'h': case 'H':
                printhelp();
+               break;
+            case 'u': case 'U':
+               HUD_VISIBLE = (HUD_VISIBLE+1) %2;
+               DISPimage.display(main_disp);
                break;
 
             case 8:                 // backspace
