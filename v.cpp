@@ -159,18 +159,15 @@ int main(int argc,char **argv) {
 
 
    /* load the initial image */
-   if ( file_exists(filename) ) {
+   {
       float *x = iio_read_image_float_vec(filename, &w, &h, &pixeldim);
       if (x) {
          fprintf(stdout, "got a %dx%d image with %d channels\n", w, h, pixeldim);
          float_to_image(x,w,h,pixeldim,imageU);
          free(x);
       }else {
-        printf("%s is a file \n", filename);
+        printf("%s isn't there or it isn't an image\n", filename);
       }
-   } else {
-      printf("initial file not found\n");
-      exit(1);
    }
 
 
@@ -486,7 +483,7 @@ flipfiles:
                   altfilename = filenames[fileidx];
 
                   // flip file patterns and load the image
-                  if(file_exists(altfilename)) {
+                  {
                      altimageU = imageU;
 
                      char *ts;
@@ -500,7 +497,7 @@ flipfiles:
                         float_to_image(x,w,h,pixeldim,imageU);
                         free(x);
                      }else {
-                        printf("%s is a file \n", filename);
+                        printf("%s isn't there or it isn't an image\n", filename);
                      }
                   }
 
